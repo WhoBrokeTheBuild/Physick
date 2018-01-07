@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"math"
 	"math/rand"
 	"runtime"
+	"time"
 
 	"github.com/go-gl/gl/v4.1-core/gl"
 	"github.com/go-gl/glfw/v3.2/glfw"
@@ -76,8 +78,23 @@ func main() {
 
 	inputState := map[glfw.Key]glfw.Action{}
 
+	frameDelay := float64(1000.0 / 60)
+	frameElap := float64(0.0)
+	currentFps := float32(0.0)
+
+	fpsUpdateFrames := 0
+	fpsUpdateDelay := float64(250.0)
+	fpsUpdateElap := float64(0.0)
+
+	now := func() float64 {
+		return float64(time.Now().UnixNano()) / float64(time.Millisecond)
+	}
+
+	timeOffset := now()
+
 	for !window.ShouldClose() {
-		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+		elapsedTime := now() - timeOffset
+		timeOffset = now()
 
 		for k := range InputMap {
 			oldState := inputState[k]
@@ -107,13 +124,45 @@ func main() {
 			}
 		}
 
+		delta := float32(elapsedTime / frameDelay)
+
 		for i := 0; i < len(Actors); i++ {
-			Actors[i].Update(1.0)
+			Actors[i].Update(delta, float32(elapsedTime/1000.0))
 			//log.Printf("%v\n", Actors[i].Transform.Position)
 			Actors[i].Render(MainShader)
+
+			for j := i + 1; j < len(Actors); j++ {
+				Actors[i].RigidBody.CheckCollide(Actors[j].RigidBody)
+			}
 		}
 
-		window.SwapBuffers()
+		frameElap += elapsedTime
+		if frameDelay <= frameElap {
+			gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+			for i := 0; i < len(Actors); i++ {
+				Actors[i].Render(MainShader)
+			}
+
+			window.SwapBuffers()
+
+			frameElap = 0.0
+			fpsUpdateFrames += 1
+		}
+
+		fpsUpdateElap += elapsedTime
+		if fpsUpdateDelay <= fpsUpdateElap {
+			currentFps = float32(float64(fpsUpdateFrames)/fpsUpdateElap) * 1000.0
+
+			title := fmt.Sprintf("Physick - %0.2f", currentFps)
+			window.SetTitle(title)
+
+			fpsUpdateElap = 0.0
+			fpsUpdateFrames = 0
+		}
+
+		//time.Sleep(time.Millisecond * 16)
+
 		glfw.PollEvents()
 	}
 }
@@ -121,12 +170,16 @@ func main() {
 func AddCube() {
 	actor := NewActor()
 	actor.AddModel(NewCubeModel(MainShader, 1.0))
-	actor.Transform.Position = mgl32.Vec3{50, 50, 50}
-	actor.RigidBody.ApplyConstantForce(mgl32.Vec3{0, -0.0000098, 0})
+	actor.Transform.Position = mgl32.Vec3{
+		rand.Float32() * 100,
+		rand.Float32() * 100,
+		rand.Float32() * 100,
+	}
+	//actor.RigidBody.ApplyConstantForce(mgl32.Vec3{0, -9.81, 0})
 	actor.RigidBody.ApplyForce(mgl32.Vec3{
-		(rand.Float32() - 0.5) / 100000,
-		(rand.Float32() - 0.5) / 100000,
-		(rand.Float32() - 0.5) / 100000,
+		(rand.Float32() - 0.5) * 10,
+		(rand.Float32() - 0.5) * 10,
+		(rand.Float32() - 0.5) * 10,
 	})
 	Actors = append(Actors, actor)
 }

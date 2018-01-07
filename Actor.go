@@ -34,15 +34,13 @@ type Actor struct {
 	models []*Model
 }
 
-var LowerBound = mgl32.Vec3{0, 0, 0}
-var UpperBound = mgl32.Vec3{100, 100, 100}
-
 func NewActor() *Actor {
 	actor := &Actor{
 		Transform: NewTransform(),
 		models:    []*Model{},
 		RigidBody: NewRigidBody(),
 	}
+	actor.RigidBody.Parent = actor
 
 	return actor
 }
@@ -51,60 +49,8 @@ func (actor *Actor) AddModel(model *Model) {
 	actor.models = append(actor.models, model)
 }
 
-func (actor *Actor) Update(delta float32) {
-	actor.RigidBody.Update(delta)
-
-	bounce := float32(0.5)
-	friction := float32(0.7)
-
-	x, y, z := actor.Transform.Position.Add(actor.RigidBody.Velocity).Elem()
-	vx, vy, vz := actor.RigidBody.Velocity.Elem()
-	ax, ay, az := actor.RigidBody.Acceleration.Elem()
-
-	if x < LowerBound.X() {
-		x = LowerBound.X()
-		vx = -vx * bounce
-		//ax = -ax
-	} else if x > UpperBound.X() {
-		x = UpperBound.X()
-		vx = -vx * bounce
-		//ax = -ax
-	}
-
-	if y < LowerBound.Y() {
-		y = LowerBound.Y()
-		vy = -vy * bounce
-		//ay = 0.0
-
-		// Friction
-		vx *= friction
-		vz *= friction
-	} else if y > UpperBound.Y() {
-		y = UpperBound.Y()
-		vy = -vy * bounce
-		//ay = -ay
-	}
-
-	if z < LowerBound.Z() {
-		z = LowerBound.Z()
-		vz = -vz * bounce
-		//az = -az
-	} else if z > UpperBound.Z() {
-		z = UpperBound.Z()
-		vz = -vz * bounce
-		//az = -az
-	}
-
-	// Clamp to floor
-	if vy < 0.0 && vy > 0.001 {
-		vy = 0.0
-	}
-
-	//log.Println(vx, vy, vz)
-
-	actor.Transform.Position = mgl32.Vec3{x, y, z}
-	actor.RigidBody.Velocity = mgl32.Vec3{vx, vy, vz}
-	actor.RigidBody.Acceleration = mgl32.Vec3{ax, ay, az}
+func (actor *Actor) Update(delta, elapsed float32) {
+	actor.RigidBody.Update(delta, elapsed)
 }
 
 func (actor *Actor) Render(shader *Shader) {
