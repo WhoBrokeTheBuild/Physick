@@ -17,6 +17,10 @@ var InputMap = map[glfw.Key]bool{
 	glfw.KeyEscape: false,
 	glfw.KeySpace:  false,
 	glfw.KeyF2:     false,
+	glfw.KeyUp:     false,
+	glfw.KeyDown:   false,
+	glfw.KeyLeft:   false,
+	glfw.KeyRight:  false,
 }
 
 var WindowSize = mgl32.Vec2{1024, 768}
@@ -124,6 +128,27 @@ func main() {
 			}
 		}
 
+		if InputMap[glfw.KeyLeft] {
+			for i := 0; i < len(Actors); i++ {
+				Actors[i].RigidBody.ApplyForce(mgl32.Vec3{-5.0, -5.0, 0.0}, Impulse)
+			}
+		}
+		if InputMap[glfw.KeyRight] {
+			for i := 0; i < len(Actors); i++ {
+				Actors[i].RigidBody.ApplyForce(mgl32.Vec3{5.0, -5.0, 0.0}, Impulse)
+			}
+		}
+		if InputMap[glfw.KeyUp] {
+			for i := 0; i < len(Actors); i++ {
+				Actors[i].RigidBody.ApplyForce(mgl32.Vec3{0.0, -5.0, -5.0}, Impulse)
+			}
+		}
+		if InputMap[glfw.KeyDown] {
+			for i := 0; i < len(Actors); i++ {
+				Actors[i].RigidBody.ApplyForce(mgl32.Vec3{0.0, -5.0, 5.0}, Impulse)
+			}
+		}
+
 		delta := float32(elapsedTime / frameDelay)
 
 		for i := 0; i < len(Actors); i++ {
@@ -175,12 +200,13 @@ func AddCube() {
 		rand.Float32() * 100,
 		rand.Float32() * 100,
 	}
-	//actor.RigidBody.ApplyConstantForce(mgl32.Vec3{0, -9.81, 0})
+	actor.RigidBody.Mass = (rand.Float32() * 9) + 1
+	actor.RigidBody.ApplyForce(mgl32.Vec3{0, -9.81, 0}, Acceleration)
 	actor.RigidBody.ApplyForce(mgl32.Vec3{
 		(rand.Float32() - 0.5) * 10,
 		(rand.Float32() - 0.5) * 10,
 		(rand.Float32() - 0.5) * 10,
-	})
+	}, Impulse)
 	Actors = append(Actors, actor)
 }
 

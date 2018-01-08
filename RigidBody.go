@@ -4,33 +4,52 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 )
 
+// ForceMode is the type of force to apply to a RigidBody
+type ForceMode int8
+
+const (
+	// ConstantForce adds a continuous force, using mass
+	ConstantForce ForceMode = iota
+	// Acceleration adds a continuous force, ignoring mass
+	Acceleration = iota
+	// Impulse adds an instant force, using mass
+	Impulse = iota
+	// VelocityChange adds an instant force, ignoring mass
+	VelocityChange = iota
+)
+
+// RigidBody is a physics body implemented with Rigid Body dynamics
 type RigidBody struct {
-	Parent            *Actor
-	Radius            float32
-	Mass              float32
-	Velocity          mgl32.Vec3
-	Acceleration      mgl32.Vec3
-	FixedAcceleration mgl32.Vec3
+	Parent       *Actor
+	Radius       float32
+	Mass         float32
+	Velocity     mgl32.Vec3
+	Acceleration mgl32.Vec3
 }
 
 func NewRigidBody() *RigidBody {
 	return &RigidBody{
-		Parent:            nil,
-		Radius:            1.0,
-		Mass:              1.0,
-		Velocity:          mgl32.Vec3{0, 0, 0},
-		Acceleration:      mgl32.Vec3{0, 0, 0},
-		FixedAcceleration: mgl32.Vec3{0, 0, 0},
+		Parent:       nil,
+		Radius:       1.0,
+		Mass:         1.0,
+		Velocity:     mgl32.Vec3{0, 0, 0},
+		Acceleration: mgl32.Vec3{0, 0, 0},
 	}
 }
 
-func (rb *RigidBody) ApplyForce(force mgl32.Vec3) {
-	force = force.Mul(1.0 / rb.Mass)
-	rb.Acceleration = force.Add(rb.FixedAcceleration)
-}
-
-func (rb *RigidBody) ApplyConstantForce(force mgl32.Vec3) {
-	rb.FixedAcceleration = rb.FixedAcceleration.Add(force)
+func (rb *RigidBody) ApplyForce(force mgl32.Vec3, mode ForceMode) {
+	switch mode {
+	case ConstantForce:
+		force = force.Mul(1.0 / rb.Mass)
+		rb.Acceleration = rb.Acceleration.Add(force)
+	case Acceleration:
+		rb.Acceleration = rb.Acceleration.Add(force)
+	case Impulse:
+		force = force.Mul(1.0 / rb.Mass)
+		rb.Velocity = rb.Velocity.Add(force)
+	case VelocityChange:
+		rb.Velocity = rb.Velocity.Add(force)
+	}
 }
 
 var LowerBound = mgl32.Vec3{0, 0, 0}
@@ -41,8 +60,8 @@ const Friction = float32(0.7)
 
 func (rb *RigidBody) Update(delta, elapsed float32) {
 	x, y, z := rb.Parent.Transform.Position.Add(rb.Velocity.Mul(delta)).Elem()
-	vx, vy, vz := rb.Velocity.Add(rb.Acceleration.Mul(delta)).Elem()
-	ax, ay, az := rb.FixedAcceleration.Mul(delta).Elem()
+	vx, vy, vz := rb.Velocity.Add(rb.Acceleration.Mul(elapsed)).Elem()
+	ax, ay, az := rb.Acceleration.Elem()
 
 	if x < LowerBound.X() {
 		x = LowerBound.X()
@@ -101,5 +120,10 @@ func (rb *RigidBody) CheckCollide(other *RigidBody) {
 }
 
 func (rb *RigidBody) Collide(other *RigidBody) {
+	pos := rb.Parent.Transform.Position
+	otherPos := other.Parent.Transform.Position
+	momentum := rb.Velocity.Add(other.Velocity).Len()
 
+	rb.Velocity = pos.Add(otherPos.Mul(-1.0)).Normalize().Mul(momentum)
+	other.Velocity = otherPos.Add(pos.Mul(-1.0)).Normalize().Mul(momentum)
 }
