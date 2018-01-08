@@ -27,6 +27,7 @@ type RigidBody struct {
 	Acceleration mgl32.Vec3
 }
 
+// NewRigidBody creates a new RigidBody with appropriate defaults
 func NewRigidBody() *RigidBody {
 	return &RigidBody{
 		Parent:       nil,
@@ -37,6 +38,7 @@ func NewRigidBody() *RigidBody {
 	}
 }
 
+// ApplyForce adds a force to the object, how it is added depenends on the mode
 func (rb *RigidBody) ApplyForce(force mgl32.Vec3, mode ForceMode) {
 	switch mode {
 	case ConstantForce:
@@ -124,6 +126,6 @@ func (rb *RigidBody) Collide(other *RigidBody) {
 	otherPos := other.Parent.Transform.Position
 	momentum := rb.Velocity.Add(other.Velocity).Len()
 
-	rb.Velocity = pos.Add(otherPos.Mul(-1.0)).Normalize().Mul(momentum)
-	other.Velocity = otherPos.Add(pos.Mul(-1.0)).Normalize().Mul(momentum)
+	rb.ApplyForce(pos.Add(otherPos.Mul(-1.0)).Normalize().Mul(momentum), Impulse)
+	other.ApplyForce(otherPos.Add(pos.Mul(-1.0)).Normalize().Mul(momentum), Impulse)
 }

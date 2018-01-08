@@ -194,13 +194,15 @@ func main() {
 
 func AddCube() {
 	actor := NewActor()
-	actor.AddModel(NewCubeModel(MainShader, 1.0))
+	size := (rand.Float32() * 3) + 1.0
+	actor.AddModel(NewCubeModel(MainShader, size))
 	actor.Transform.Position = mgl32.Vec3{
 		rand.Float32() * 100,
 		rand.Float32() * 100,
 		rand.Float32() * 100,
 	}
-	actor.RigidBody.Mass = (rand.Float32() * 9) + 1
+	actor.RigidBody.Radius = size
+	actor.RigidBody.Mass = (rand.Float32() * 9) + 1.0
 	actor.RigidBody.ApplyForce(mgl32.Vec3{0, -9.81, 0}, Acceleration)
 	actor.RigidBody.ApplyForce(mgl32.Vec3{
 		(rand.Float32() - 0.5) * 10,
