@@ -15,12 +15,16 @@ import (
 
 var inputMap = map[glfw.Key]bool{
 	glfw.KeyEscape: false,
-	glfw.KeySpace:  false,
 	glfw.KeyF2:     false,
 	glfw.KeyUp:     false,
 	glfw.KeyDown:   false,
 	glfw.KeyLeft:   false,
 	glfw.KeyRight:  false,
+	glfw.Key1:      false,
+	glfw.Key2:      false,
+	glfw.Key3:      false,
+	glfw.Key4:      false,
+	glfw.Key5:      false,
 }
 
 var windowSize = mgl32.Vec2{1024, 768}
@@ -122,10 +126,17 @@ func main() {
 			}
 		}
 
-		if inputMap[glfw.KeySpace] {
-			for i := 0; i < 10; i++ {
-				AddCube()
-			}
+		if inputMap[glfw.Key1] {
+			Test1()
+		}
+		if inputMap[glfw.Key2] {
+			Test2()
+		}
+		if inputMap[glfw.Key3] {
+			Test3()
+		}
+		if inputMap[glfw.Key4] {
+			Test4()
 		}
 
 		if inputMap[glfw.KeyLeft] {
@@ -154,11 +165,12 @@ func main() {
 		for i := 0; i < len(actors); i++ {
 			actors[i].Update(delta, float32(elapsedTime/1000.0))
 			//log.Printf("%v\n", actors[i].Transform.Position)
-			actors[i].Render(mainShader)
 
 			for j := i + 1; j < len(actors); j++ {
 				actors[i].RigidBody.CheckCollide(actors[j].RigidBody)
 			}
+
+			actors[i].Render(mainShader)
 		}
 
 		frameElap += elapsedTime
@@ -196,27 +208,105 @@ func RemoveAllActors() {
 
 }
 
-func AddCube() {
-	actor := NewActor()
-	//size := (rand.Float32() * 3) + 1.0
-	size := float32(1)
+func Test1() {
 	model, _ := NewModelFromFile("assets/sphere.obj")
-	actor.AddModel(model)
-	actor.Transform.Position = mgl32.Vec3{
-		rand.Float32() * 100,
-		rand.Float32() * 100,
-		rand.Float32() * 100,
+
+	for i := 0; i < 10; i++ {
+		actor := NewActor()
+		size := (rand.Float32() * 3) + 1.0
+		//size := float32(3)
+		actor.AddModel(model)
+		actor.Transform.Position = mgl32.Vec3{
+			rand.Float32() * 100,
+			rand.Float32() * 100,
+			rand.Float32() * 100,
+		}
+		actor.Transform.Scale = mgl32.Vec3{size, size, size}
+		actor.RigidBody.Radius = size
+		actor.RigidBody.Mass = size + 2
+		actor.RigidBody.ApplyForce(mgl32.Vec3{0, -9.81, 0}, Acceleration)
+		actor.RigidBody.ApplyForce(mgl32.Vec3{
+			(rand.Float32() - 0.5) * 10,
+			(rand.Float32() - 0.5) * 10,
+			(rand.Float32() - 0.5) * 10,
+		}, Impulse)
+		actors = append(actors, actor)
 	}
+}
+
+func Test2() {
+	model, _ := NewModelFromFile("assets/sphere.obj")
+
+	actor := NewActor()
+	size := float32(3)
+	actor.AddModel(model)
+	actor.Transform.Position = mgl32.Vec3{50, 75, 50}
 	actor.Transform.Scale = mgl32.Vec3{size, size, size}
 	actor.RigidBody.Radius = size
 	actor.RigidBody.Mass = size
 	actor.RigidBody.ApplyForce(mgl32.Vec3{0, -9.81, 0}, Acceleration)
-	actor.RigidBody.ApplyForce(mgl32.Vec3{
-		(rand.Float32() - 0.5) * 10,
-		(rand.Float32() - 0.5) * 10,
-		(rand.Float32() - 0.5) * 10,
-	}, Impulse)
 	actors = append(actors, actor)
+
+	actor = NewActor()
+	size = float32(3)
+	actor.AddModel(model)
+	actor.Transform.Position = mgl32.Vec3{50, 25, 50}
+	actor.Transform.Scale = mgl32.Vec3{size, size, size}
+	actor.RigidBody.Radius = size
+	actor.RigidBody.Mass = size
+	actor.RigidBody.ApplyForce(mgl32.Vec3{0, -9.81, 0}, Acceleration)
+	actors = append(actors, actor)
+}
+
+func Test3() {
+	model, _ := NewModelFromFile("assets/sphere.obj")
+
+	actor := NewActor()
+	size := float32(3)
+	actor.AddModel(model)
+	actor.Transform.Position = mgl32.Vec3{10, 75, 50}
+	actor.Transform.Scale = mgl32.Vec3{size, size, size}
+	actor.RigidBody.Radius = size
+	actor.RigidBody.Mass = size
+	actor.RigidBody.ApplyForce(mgl32.Vec3{0, -9.81, 0}, Acceleration)
+	actor.RigidBody.ApplyForce(mgl32.Vec3{5, 0, 0}, Impulse)
+	actors = append(actors, actor)
+
+	actor = NewActor()
+	size = float32(3)
+	actor.AddModel(model)
+	actor.Transform.Position = mgl32.Vec3{90, 75, 50}
+	actor.Transform.Scale = mgl32.Vec3{size, size, size}
+	actor.RigidBody.Radius = size
+	actor.RigidBody.Mass = size
+	actor.RigidBody.ApplyForce(mgl32.Vec3{0, -9.81, 0}, Acceleration)
+	actor.RigidBody.ApplyForce(mgl32.Vec3{-5, 0, 0}, Impulse)
+	actors = append(actors, actor)
+}
+
+func Test4() {
+	model, _ := NewModelFromFile("assets/sphere.obj")
+
+	for i := 0; i < 100; i++ {
+		actor := NewActor()
+		size := float32(1.0)
+		actor.AddModel(model)
+		actor.Transform.Position = mgl32.Vec3{
+			rand.Float32() * 100,
+			rand.Float32() * 100,
+			rand.Float32() * 100,
+		}
+		actor.Transform.Scale = mgl32.Vec3{size, size, size}
+		actor.RigidBody.Radius = size
+		actor.RigidBody.Mass = size + 1
+		actor.RigidBody.ApplyForce(mgl32.Vec3{0, -9.81, 0}, Acceleration)
+		actor.RigidBody.ApplyForce(mgl32.Vec3{
+			(rand.Float32() - 0.5) * 10,
+			(rand.Float32() - 0.5) * 10,
+			(rand.Float32() - 0.5) * 10,
+		}, Impulse)
+		actors = append(actors, actor)
+	}
 }
 
 func DistanceSquared(p1, p2 mgl32.Vec3) float32 {

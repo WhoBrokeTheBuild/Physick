@@ -119,7 +119,7 @@ func (rb *RigidBody) Update(delta, elapsed float32) {
 	if rb.Velocity.Len() > 100.0 {
 		rb.Velocity = rb.Velocity.Normalize().Mul(100.0)
 	}
-	if rb.Velocity.Len() < 0.0001 {
+	if rb.Velocity.Len() < 0.001 {
 		rb.Velocity = mgl32.Vec3{0, 0, 0}
 	}
 }
@@ -129,21 +129,24 @@ func (rb *RigidBody) CheckCollide(other *RigidBody) {
 	otherPos := other.Parent.Transform.Position
 
 	dist := DistanceSquared(pos, otherPos)
-	if dist < rb.Radius+other.Radius {
+	if dist < (rb.Radius+other.Radius)*(rb.Radius+other.Radius) {
 		rb.Collide(other)
 	}
 }
 
 func (rb *RigidBody) Collide(other *RigidBody) {
-	x := rb.Parent.Transform.Position.Add(other.Parent.Transform.Position.Mul(-1.0)).Normalize()
-	v1 := rb.Velocity
+	diff := rb.Parent.Transform.Position.Add(other.Parent.Transform.Position.Mul(-1.0))
+	move := (rb.Radius + other.Radius) - diff.Len()
+
+	x := diff.Normalize()
+	v1 := rb.Velocity.Add(x.Mul(-move * 0.5))
 	x1 := x.Dot(v1)
 	v1x := x.Mul(x1)
 	v1y := v1.Add(v1x.Mul(-1.0))
 	m1 := rb.Mass
 
 	x = x.Mul(-1.0)
-	v2 := other.Velocity
+	v2 := other.Velocity.Add(x.Mul(-move * 0.5))
 	x2 := x.Dot(v2)
 	v2x := x.Mul(x2)
 	v2y := v2.Add(v2x.Mul(-1.0))
