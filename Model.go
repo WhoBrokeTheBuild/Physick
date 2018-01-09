@@ -1,308 +1,334 @@
 package main
 
 import (
-	"log"
-	"math"
+	"bufio"
+	"bytes"
+	"fmt"
+	"io/ioutil"
+	"strings"
 
 	"github.com/go-gl/gl/v4.1-core/gl"
 	"github.com/go-gl/mathgl/mgl32"
 )
 
+const (
+	VERT_ATTRIB = 0
+	NORM_ATTRIB = 1
+	TXCD_ATTRIB = 2
+)
+
+type modelGroup struct {
+	DrawMode uint32
+	Start    int32
+	Count    int32
+}
+
 type Model struct {
-	glVBO  uint32
-	glVAO  uint32
-	glType uint32
-	count  int32
+	Transform mgl32.Mat4
+
+	glVao  uint32
+	glVbos [3]uint32
+	groups []modelGroup
 }
 
-func NewCubeModel(shader *Shader, size float32) *Model {
-	var vao uint32
-	var vbo uint32
-
-	cubeData := []float32{
-		//  X, Y, Z, U, V
-		// Bottom
-		-size, -size, -size, 0.0, 0.0,
-		size, -size, -size, 1.0, 0.0,
-		-size, -size, size, 0.0, 1.0,
-		size, -size, -size, 1.0, 0.0,
-		size, -size, size, 1.0, 1.0,
-		-size, -size, size, 0.0, 1.0,
-
-		// Top
-		-size, size, -size, 0.0, 0.0,
-		-size, size, size, 0.0, 1.0,
-		size, size, -size, 1.0, 0.0,
-		size, size, -size, 1.0, 0.0,
-		-size, size, size, 0.0, 1.0,
-		size, size, size, 1.0, 1.0,
-
-		// Front
-		-size, -size, size, 1.0, 0.0,
-		size, -size, size, 0.0, 0.0,
-		-size, size, size, 1.0, 1.0,
-		size, -size, size, 0.0, 0.0,
-		size, size, size, 0.0, 1.0,
-		-size, size, size, 1.0, 1.0,
-
-		// Back
-		-size, -size, -size, 0.0, 0.0,
-		-size, size, -size, 0.0, 1.0,
-		size, -size, -size, 1.0, 0.0,
-		size, -size, -size, 1.0, 0.0,
-		-size, size, -size, 0.0, 1.0,
-		size, size, -size, 1.0, 1.0,
-
-		// Left
-		-size, -size, size, 0.0, 1.0,
-		-size, size, -size, 1.0, 0.0,
-		-size, -size, -size, 0.0, 0.0,
-		-size, -size, size, 0.0, 1.0,
-		-size, size, size, 1.0, 1.0,
-		-size, size, -size, 1.0, 0.0,
-
-		// Right
-		size, -size, size, 1.0, 1.0,
-		size, -size, -size, 1.0, 0.0,
-		size, size, -size, 0.0, 0.0,
-		size, -size, size, 1.0, 1.0,
-		size, size, -size, 0.0, 0.0,
-		size, size, size, 0.0, 1.0,
-	}
-
-	gl.GenVertexArrays(1, &vao)
-	gl.BindVertexArray(vao)
-
-	gl.GenBuffers(1, &vbo)
-	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
-	gl.BufferData(gl.ARRAY_BUFFER, len(cubeData)*4, gl.Ptr(cubeData), gl.STATIC_DRAW)
-
-	vertAttrib := uint32(shader.GetAttribLocation("a_Vertex"))
-	gl.EnableVertexAttribArray(vertAttrib)
-	gl.VertexAttribPointer(vertAttrib, 3, gl.FLOAT, false, 5*4, gl.PtrOffset(0))
-
-	txcdAttrib := uint32(shader.GetAttribLocation("a_Texcoord"))
-	gl.EnableVertexAttribArray(txcdAttrib)
-	gl.VertexAttribPointer(txcdAttrib, 2, gl.FLOAT, false, 5*4, gl.PtrOffset(3*4))
-
-	model := &Model{
-		glVAO:  vao,
-		glVBO:  vbo,
-		glType: gl.TRIANGLES,
-		count:  6 * 2 * 3,
-	}
-
-	return model
+func NewModel() (*Model, error) {
+	return &Model{
+		Transform: mgl32.Ident4(),
+		glVao:     0,
+		glVbos:    [3]uint32{0, 0, 0},
+	}, nil
 }
 
-// TODO Make work
-func NewSphereModel(shader *Shader, radius float32) *Model {
-	const rings = 5
-	const sectors = 10
+func NewModelFromFile(filename string) (*Model, error) {
+	model, err := NewModel()
+	if err != nil {
+		return model, err
+	}
+	err = model.LoadFromFile(filename)
+	if err != nil {
+		return model, err
+	}
+	return model, nil
+}
 
-	const count = rings * sectors * 6
+func (model *Model) Cleanup() {
+	gl.DeleteBuffers(3, &model.glVbos[0])
+	gl.DeleteVertexArrays(1, &model.glVao)
+}
 
-	tmpVerts := make([]mgl32.Vec3, (rings+1)*(sectors+1))
-	tmpTxcds := make([]mgl32.Vec2, (rings+1)*(sectors+1))
+func (model *Model) LoadFromFile(filename string) error {
+	// Holds a material
+	type MatDef struct {
+		Ambient     mgl32.Vec3
+		Diffuse     mgl32.Vec3
+		Specular    mgl32.Vec3
+		Shininess   float32
+		Dissolve    float32
+		AmbientMap  string
+		SpecularMap string
+		DiffuseMap  string
+		BumpMap     string
+	}
 
-	data := make([]float32, count*(3+2))
+	// Holds a single face
+	type Face struct {
+		VertInds [3]int
+		NormInds [3]int
+		TxcdInds [3]int
+	}
 
-	R := 1.0 / float64(rings-1.0)
-	S := 1.0 / float64(sectors-1.0)
+	// Holds a group of faces and a material
+	type Group struct {
+		Name     string
+		Material string
+		Faces    []Face
+	}
 
-	i := 0
-	for r := 0; r < rings+1; r++ {
-		for s := 0; s < sectors+1; s++ {
-			x := math.Sin((-math.Pi * 0.5) + (math.Pi * float64(r) * R))
-			y := math.Cos(2.0*math.Pi*float64(s)*S) * math.Sin(math.Pi*float64(r)*R)
-			z := math.Cos(2.0*math.Pi*float64(s)*S) * math.Sin(math.Pi*float64(r)*R)
+	// Open the .obj file
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return err
+	}
 
-			tmpVerts[i] = mgl32.Vec3{
-				radius * float32(x),
-				radius * float32(y),
-				radius * float32(z),
+	// Create a reader with a specific buffer size, needed by reader.ReadLine()
+	reader := bufio.NewReader(bytes.NewReader(data))
+
+	// Create a list of groups, and get a pointer to the first
+	groups := []Group{{}}
+	group := &groups[0]
+
+	// Create the list of all Vertices, Normals, and Texture Coordinates
+	allVerts := []mgl32.Vec3{}
+	allNorms := []mgl32.Vec3{}
+	allTxcds := []mgl32.Vec2{}
+
+	var line string
+	var count int
+
+	tmpVec3 := mgl32.Vec3{}
+	tmpVec2 := mgl32.Vec2{}
+	tmpFace := Face{}
+
+	tmp, _, err := reader.ReadLine()
+	for ; err == nil; tmp, _, err = reader.ReadLine() {
+		line = string(tmp)
+
+		// Ignore empty lines and comments
+		if len(line) == 0 || line[0] == '#' {
+			continue
+		}
+
+		// Split on the first ' ', ignore half lines
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) == 0 {
+			continue
+		}
+
+		switch parts[0] {
+		case "usemtl":
+
+			group.Material = parts[1]
+
+		case "mtllib":
+
+			if err != nil {
+				return err
 			}
-			//tmpNorms[i] = mgl32.Vec3{
-			//    float32(x),
-			//    float32(y),
-			//    float32(z),
-			//}
-			tmpTxcds[i] = mgl32.Vec2{
-				float32(s) * float32(S),
-				float32(r) * float32(R),
+
+		case "o":
+			fallthrough
+		case "g":
+
+			if group.Name == "" {
+				group.Name = parts[1]
+			} else {
+				groups = append(groups, Group{
+					Name: parts[1],
+				})
+				group = &groups[len(groups)-1]
 			}
-			i++
+
+		case "f":
+
+			// Test for and parse faces in the 'v//vn v//vn v//vn' format
+			if strings.Contains(parts[1], "//") {
+				count, err = fmt.Sscanf(parts[1],
+					"%d//%d %d//%d %d//%d",
+					&tmpFace.VertInds[0],
+					&tmpFace.NormInds[0],
+					&tmpFace.VertInds[1],
+					&tmpFace.NormInds[1],
+					&tmpFace.VertInds[2],
+					&tmpFace.NormInds[2],
+				)
+				if err != nil || count != 6 {
+					return fmt.Errorf("Malformed OBJ file '%v' %v", line)
+				}
+				// Test for and parse faces in the 'v/vt v/vt v/vt' format
+			} else if strings.Count(parts[1], "/") == 3 {
+				count, err = fmt.Sscanf(parts[1],
+					"%d/%d %d/%d %d/%d",
+					&tmpFace.VertInds[0],
+					&tmpFace.TxcdInds[0],
+					&tmpFace.VertInds[1],
+					&tmpFace.TxcdInds[1],
+					&tmpFace.VertInds[2],
+					&tmpFace.TxcdInds[2],
+				)
+				if err != nil || count != 6 {
+					return fmt.Errorf("Malformed OBJ file '%v'", line)
+				}
+				// Test for and parse faces in the 'v/vt/vn v/vt/vn v/vt/vn' format
+			} else if strings.Count(parts[1], "/") == 6 {
+				count, err = fmt.Sscanf(parts[1],
+					"%d/%d/%d %d/%d/%d %d/%d/%d",
+					&tmpFace.VertInds[0],
+					&tmpFace.TxcdInds[0],
+					&tmpFace.NormInds[0],
+					&tmpFace.VertInds[1],
+					&tmpFace.TxcdInds[1],
+					&tmpFace.NormInds[1],
+					&tmpFace.VertInds[2],
+					&tmpFace.TxcdInds[2],
+					&tmpFace.NormInds[2],
+				)
+				if err != nil || count != 9 {
+					return fmt.Errorf("Malformed OBJ file '%v'", line)
+				}
+			} else {
+				return fmt.Errorf("Malformed OBJ file '%v'", line)
+			}
+
+			group.Faces = append(group.Faces, tmpFace)
+
+		case "v":
+
+			count, err = fmt.Sscanf(parts[1], "%f %f %f", &tmpVec3[0], &tmpVec3[1], &tmpVec3[2])
+			if err != nil || count != 3 {
+				return fmt.Errorf("Malformed OBJ file '%v'", line)
+			}
+
+			allVerts = append(allVerts, tmpVec3)
+
+		case "vn":
+
+			count, err = fmt.Sscanf(parts[1], "%f %f %f", &tmpVec3[0], &tmpVec3[1], &tmpVec3[2])
+			if err != nil || count != 3 {
+				return fmt.Errorf("Malformed OBJ file '%v'", line)
+			}
+
+			allNorms = append(allNorms, tmpVec3)
+
+		case "vt":
+
+			count, err = fmt.Sscanf(parts[1], "%f %f", &tmpVec2[0], &tmpVec2[1])
+			if err != nil || count != 2 {
+				return fmt.Errorf("Malformed OBJ file '%v'", line)
+			}
+
+			allTxcds = append(allTxcds, tmpVec2)
+
 		}
 	}
 
-	i = 0
-	for r := 0; r < rings; r++ {
-		for s := 0; s < sectors; s++ {
-			log.Println(r, s, count, i)
-			data[i+0] = tmpVerts[r*sectors+s][0]
-			data[i+1] = tmpVerts[r*sectors+s][1]
-			data[i+2] = tmpVerts[r*sectors+s][2]
-			data[i+3] = tmpTxcds[r*sectors+s][0]
-			data[i+4] = tmpTxcds[r*sectors+s][1]
-			i += 5
-			data[i+0] = tmpVerts[r*sectors+(s+1)][0]
-			data[i+1] = tmpVerts[r*sectors+(s+1)][1]
-			data[i+2] = tmpVerts[r*sectors+(s+1)][2]
-			data[i+3] = tmpTxcds[r*sectors+(s+1)][0]
-			data[i+4] = tmpTxcds[r*sectors+(s+1)][1]
-			i += 5
-			data[i+0] = tmpVerts[(r+1)*sectors+s][0]
-			data[i+1] = tmpVerts[(r+1)*sectors+s][1]
-			data[i+2] = tmpVerts[(r+1)*sectors+s][2]
-			data[i+3] = tmpTxcds[(r+1)*sectors+s][0]
-			data[i+4] = tmpTxcds[(r+1)*sectors+s][1]
-			i += 5
-			data[i+0] = tmpVerts[r*sectors+(s+1)][0]
-			data[i+1] = tmpVerts[r*sectors+(s+1)][1]
-			data[i+2] = tmpVerts[r*sectors+(s+1)][2]
-			data[i+3] = tmpTxcds[r*sectors+(s+1)][0]
-			data[i+4] = tmpTxcds[r*sectors+(s+1)][1]
-			i += 5
-			data[i+0] = tmpVerts[(r+1)*sectors+s][0]
-			data[i+1] = tmpVerts[(r+1)*sectors+s][1]
-			data[i+2] = tmpVerts[(r+1)*sectors+s][2]
-			data[i+3] = tmpTxcds[(r+1)*sectors+s][0]
-			data[i+4] = tmpTxcds[(r+1)*sectors+s][1]
-			i += 5
-			data[i+0] = tmpVerts[(r+1)*sectors+(s+1)][0]
-			data[i+1] = tmpVerts[(r+1)*sectors+(s+1)][1]
-			data[i+2] = tmpVerts[(r+1)*sectors+(s+1)][2]
-			data[i+3] = tmpTxcds[(r+1)*sectors+(s+1)][0]
-			data[i+4] = tmpTxcds[(r+1)*sectors+(s+1)][1]
-			i += 5
-		}
+	if group.Name == "" {
+		group.Name = "default"
 	}
 
-	var vao uint32
-	var vbo uint32
+	start := int32(0)
+	verts := []float32{}
+	norms := []float32{}
+	txcds := []float32{}
 
-	gl.GenVertexArrays(1, &vao)
-	gl.BindVertexArray(vao)
+	for g := range groups {
+		group := &groups[g]
+		for f := range group.Faces {
+			face := &group.Faces[f]
+			for i := 0; i < 3; i++ {
+				// Adjust for negative indices
+				if face.VertInds[i] < 0 {
+					face.VertInds[i] += len(allVerts)
+				}
+				if face.NormInds[i] < 0 {
+					face.NormInds[i] += len(allNorms)
+				}
+				if face.TxcdInds[i] < 0 {
+					face.TxcdInds[i] += len(allTxcds)
+				}
 
-	gl.GenBuffers(1, &vbo)
-	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
-	gl.BufferData(gl.ARRAY_BUFFER, len(data)*4, gl.Ptr(data), gl.STATIC_DRAW)
+				// Adjust for zero-indexing
+				face.VertInds[i] -= 1
+				face.NormInds[i] -= 1
+				face.TxcdInds[i] -= 1
 
-	vertAttrib := uint32(shader.GetAttribLocation("a_Vertex"))
-	gl.EnableVertexAttribArray(vertAttrib)
-	gl.VertexAttribPointer(vertAttrib, 3, gl.FLOAT, false, 4, gl.PtrOffset(0))
-
-	txcdAttrib := uint32(shader.GetAttribLocation("a_Texcoord"))
-	gl.EnableVertexAttribArray(txcdAttrib)
-	gl.VertexAttribPointer(txcdAttrib, 2, gl.FLOAT, false, 5*4, gl.PtrOffset(3*4))
-
-	model := &Model{
-		glVAO:  vao,
-		glVBO:  vbo,
-		glType: gl.TRIANGLES,
-		count:  count,
-	}
-
-	return model
-}
-
-func NewPlaneModel(shader *Shader, size float32) *Model {
-	const rows = 10
-	const cols = 10
-
-	const count = (rows * cols) + (rows-1)*(cols-2)
-
-	sqWidth := size / cols
-	sqHeight := size / rows
-
-	tmpVerts := make([]mgl32.Vec3, rows*cols)
-	tmpTxcds := make([]mgl32.Vec2, rows*cols)
-
-	data := make([]float32, count*(3+2))
-
-	i := 0
-	for row := 0; row < rows; row++ {
-		for col := 0; col < cols; col++ {
-			tmpVerts[i] = mgl32.Vec3{float32(col) * sqWidth, 0.0, float32(row) * sqHeight}
-			tmpTxcds[i] = mgl32.Vec2{float32(col) / float32(cols), float32(row) / float32(rows)}
-			i++
-		}
-	}
-
-	i = 0
-	for row := 0; row < rows-1; row++ {
-		if row&1 == 0 {
-			// Even Rows
-			for col := 0; col < cols; col++ {
-				data[i+0] = tmpVerts[col+row*cols][0]
-				data[i+1] = tmpVerts[col+row*cols][1]
-				data[i+2] = tmpVerts[col+row*cols][2]
-				data[i+3] = tmpTxcds[col+row*cols][0]
-				data[i+4] = tmpTxcds[col+row*cols][1]
-				i += 5
-				data[i+0] = tmpVerts[col+(row+1)*cols][0]
-				data[i+1] = tmpVerts[col+(row+1)*cols][1]
-				data[i+2] = tmpVerts[col+(row+1)*cols][2]
-				data[i+3] = tmpTxcds[col+(row+1)*cols][0]
-				data[i+4] = tmpTxcds[col+(row+1)*cols][1]
-				i += 5
-			}
-		} else {
-			// Odd Rows
-			for col := cols - 1; col > 0; col-- {
-				data[i+0] = tmpVerts[col+(row+1)*cols][0]
-				data[i+1] = tmpVerts[col+(row+1)*cols][1]
-				data[i+2] = tmpVerts[col+(row+1)*cols][2]
-				data[i+3] = tmpTxcds[col+(row+1)*cols][0]
-				data[i+4] = tmpTxcds[col+(row+1)*cols][1]
-				i += 5
-				data[i+0] = tmpVerts[col-1+row*cols][0]
-				data[i+1] = tmpVerts[col-1+row*cols][1]
-				data[i+2] = tmpVerts[col-1+row*cols][2]
-				data[i+3] = tmpTxcds[col-1+row*cols][0]
-				data[i+4] = tmpTxcds[col-1+row*cols][1]
-				i += 5
+				// Copy data to final arrays
+				verts = append(verts,
+					allVerts[face.VertInds[i]][0],
+					allVerts[face.VertInds[i]][1],
+					allVerts[face.VertInds[i]][2],
+				)
+				if face.NormInds[i] >= 0 {
+					norms = append(norms,
+						allNorms[face.NormInds[i]][0],
+						allNorms[face.NormInds[i]][1],
+						allNorms[face.NormInds[i]][2],
+					)
+				}
+				if face.TxcdInds[i] >= 0 {
+					txcds = append(txcds,
+						allTxcds[face.TxcdInds[i]][0],
+						allTxcds[face.TxcdInds[i]][1],
+					)
+				}
 			}
 		}
-	}
-	if rows&1 == 1 && rows > 2 {
-		data[i+0] = tmpVerts[(rows-1)*cols][0]
-		data[i+1] = tmpVerts[(rows-1)*cols][1]
-		data[i+2] = tmpVerts[(rows-1)*cols][2]
-		data[i+3] = tmpTxcds[(rows-1)*cols][0]
-		data[i+4] = tmpTxcds[(rows-1)*cols][1]
-		i += 5
-	}
 
-	var vao uint32
-	var vbo uint32
-
-	gl.GenVertexArrays(1, &vao)
-	gl.BindVertexArray(vao)
-
-	gl.GenBuffers(1, &vbo)
-	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
-	gl.BufferData(gl.ARRAY_BUFFER, len(data)*4, gl.Ptr(data), gl.STATIC_DRAW)
-
-	vertAttrib := uint32(shader.GetAttribLocation("a_Vertex"))
-	gl.EnableVertexAttribArray(vertAttrib)
-	gl.VertexAttribPointer(vertAttrib, 3, gl.FLOAT, false, 5*4, gl.PtrOffset(0))
-
-	txcdAttrib := uint32(shader.GetAttribLocation("a_Texcoord"))
-	gl.EnableVertexAttribArray(txcdAttrib)
-	gl.VertexAttribPointer(txcdAttrib, 2, gl.FLOAT, false, 5*4, gl.PtrOffset(3*4))
-
-	model := &Model{
-		glVAO:  vao,
-		glVBO:  vbo,
-		glType: gl.TRIANGLE_STRIP,
-		count:  count,
+		vertCount := int32(len(group.Faces) * 3 * 3)
+		model.groups = append(model.groups, modelGroup{
+			DrawMode: gl.TRIANGLES,
+			Start:    start,
+			Count:    vertCount,
+		})
+		start += vertCount
 	}
 
-	return model
+	gl.GenVertexArrays(1, &model.glVao)
+	gl.BindVertexArray(model.glVao)
+	gl.GenBuffers(3, &model.glVbos[0])
+
+	gl.BindBuffer(gl.ARRAY_BUFFER, model.glVbos[0])
+	gl.BufferData(gl.ARRAY_BUFFER, len(verts)*4, gl.Ptr(verts), gl.STATIC_DRAW)
+	gl.VertexAttribPointer(VERT_ATTRIB, 3, gl.FLOAT, false, 0, gl.PtrOffset(0))
+	gl.EnableVertexAttribArray(VERT_ATTRIB)
+
+	if len(norms) == 0 {
+		gl.DeleteBuffers(1, &model.glVbos[1])
+		model.glVbos[1] = 0
+	} else {
+		gl.BindBuffer(gl.ARRAY_BUFFER, model.glVbos[1])
+		gl.BufferData(gl.ARRAY_BUFFER, len(norms)*4, gl.Ptr(norms), gl.STATIC_DRAW)
+		gl.VertexAttribPointer(NORM_ATTRIB, 3, gl.FLOAT, false, 0, gl.PtrOffset(0))
+		gl.EnableVertexAttribArray(NORM_ATTRIB)
+	}
+
+	if len(txcds) == 0 {
+		gl.DeleteBuffers(1, &model.glVbos[2])
+		model.glVbos[2] = 0
+	} else {
+		gl.BindBuffer(gl.ARRAY_BUFFER, model.glVbos[2])
+		gl.BufferData(gl.ARRAY_BUFFER, len(txcds)*4, gl.Ptr(txcds), gl.STATIC_DRAW)
+		gl.VertexAttribPointer(TXCD_ATTRIB, 2, gl.FLOAT, false, 0, gl.PtrOffset(0))
+		gl.EnableVertexAttribArray(TXCD_ATTRIB)
+	}
+
+	return nil
 }
 
-func (model *Model) Render() {
-	gl.BindVertexArray(model.glVAO)
-	gl.DrawArrays(model.glType, 0, model.count)
+func (model *Model) Render(shader *Shader) {
+	gl.BindVertexArray(model.glVao)
+
+	for g := range model.groups {
+		group := &model.groups[g]
+		gl.DrawArrays(group.DrawMode, group.Start, group.Count)
+	}
 }

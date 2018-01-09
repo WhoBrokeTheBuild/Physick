@@ -20,11 +20,11 @@ func NewTransform() Transform {
 }
 
 func (t Transform) GetMatrix() mgl32.Mat4 {
-	return mgl32.Scale3D(t.Scale.X(), t.Scale.Y(), t.Scale.Z()).
+	return mgl32.Translate3D(t.Position.X(), t.Position.Y(), t.Position.Z()).
 		Mul4(mgl32.Rotate3DX(t.Rotation.X()).Mat4()).
 		Mul4(mgl32.Rotate3DX(t.Rotation.Y()).Mat4()).
 		Mul4(mgl32.Rotate3DX(t.Rotation.Z()).Mat4()).
-		Mul4(mgl32.Translate3D(t.Position.X(), t.Position.Y(), t.Position.Z()))
+		Mul4(mgl32.Scale3D(t.Scale.X(), t.Scale.Y(), t.Scale.Z()))
 }
 
 type Actor struct {
@@ -45,6 +45,17 @@ func NewActor() *Actor {
 	return actor
 }
 
+// Cleanup frees up resources
+func (actor *Actor) Cleanup() {
+	actor.RigidBody.Cleanup()
+	actor.RigidBody = nil
+
+	for i := range actor.models {
+		actor.models[i].Cleanup()
+		actor.models[i] = nil
+	}
+}
+
 func (actor *Actor) AddModel(model *Model) {
 	actor.models = append(actor.models, model)
 }
@@ -60,6 +71,6 @@ func (actor *Actor) Render(shader *Shader) {
 	gl.UniformMatrix4fv(shader.GetUniformLocation("u_Model"), 1, false, &model[0])
 
 	for i := 0; i < len(actor.models); i++ {
-		actor.models[i].Render()
+		actor.models[i].Render(shader)
 	}
 }

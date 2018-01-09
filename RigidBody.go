@@ -38,6 +38,11 @@ func NewRigidBody() *RigidBody {
 	}
 }
 
+// Cleanup frees up resources
+func (rb *RigidBody) Cleanup() {
+	rb.Parent = nil
+}
+
 // ApplyForce adds a force to the object, how it is added depenends on the mode
 func (rb *RigidBody) ApplyForce(force mgl32.Vec3, mode ForceMode) {
 	switch mode {
@@ -109,6 +114,14 @@ func (rb *RigidBody) Update(delta, elapsed float32) {
 	rb.Parent.Transform.Position = mgl32.Vec3{x, y, z}
 	rb.Velocity = mgl32.Vec3{vx, vy, vz}
 	rb.Acceleration = mgl32.Vec3{ax, ay, az}
+
+	// Min/Max Velocity
+	if rb.Velocity.Len() > 100.0 {
+		rb.Velocity = rb.Velocity.Normalize().Mul(100.0)
+	}
+	if rb.Velocity.Len() < 0.0001 {
+		rb.Velocity = mgl32.Vec3{0, 0, 0}
+	}
 }
 
 func (rb *RigidBody) CheckCollide(other *RigidBody) {
@@ -122,10 +135,20 @@ func (rb *RigidBody) CheckCollide(other *RigidBody) {
 }
 
 func (rb *RigidBody) Collide(other *RigidBody) {
-	pos := rb.Parent.Transform.Position
-	otherPos := other.Parent.Transform.Position
-	momentum := rb.Velocity.Add(other.Velocity).Len()
+	x := rb.Parent.Transform.Position.Add(other.Parent.Transform.Position.Mul(-1.0)).Normalize()
+	v1 := rb.Velocity
+	x1 := x.Dot(v1)
+	v1x := x.Mul(x1)
+	v1y := v1.Add(v1x.Mul(-1.0))
+	m1 := rb.Mass
 
-	rb.ApplyForce(pos.Add(otherPos.Mul(-1.0)).Normalize().Mul(momentum), Impulse)
-	other.ApplyForce(otherPos.Add(pos.Mul(-1.0)).Normalize().Mul(momentum), Impulse)
+	x = x.Mul(-1.0)
+	v2 := other.Velocity
+	x2 := x.Dot(v2)
+	v2x := x.Mul(x2)
+	v2y := v2.Add(v2x.Mul(-1.0))
+	m2 := other.Mass
+
+	rb.Velocity = v1x.Mul((m1 - m2) / (m1 + m2)).Add(v2x.Mul((2 * m2) / (m1 + m2)).Add(v1y))
+	other.Velocity = v1x.Mul((2 * m1) / (m1 + m2)).Add(v2x.Mul((m2 - m1) / (m1 + m2)).Add(v2y))
 }
