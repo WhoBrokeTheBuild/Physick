@@ -84,6 +84,14 @@ func main() {
 	gl.UniformMatrix4fv(mainShader.GetUniformLocation("u_View"), 1, false, &view[0])
 	gl.UniformMatrix4fv(mainShader.GetUniformLocation("u_Projection"), 1, false, &projection[0])
 
+	floor := NewActor()
+	floorMdl, _ := NewModelFromFile("assets/cube.obj")
+	floor.AddModel(floorMdl)
+	floor.Transform.Position = mgl32.Vec3{0, 0, 0}
+	floor.Transform.Scale = mgl32.Vec3{100, 0, 100}
+	floor.RigidBody.Mass = math.MaxFloat32
+	actors = append(actors, floor)
+
 	inputState := map[glfw.Key]glfw.Action{}
 
 	frameDelay := float64(1000.0 / 60)
@@ -222,7 +230,7 @@ func Test1() {
 			rand.Float32() * 100,
 		}
 		actor.Transform.Scale = mgl32.Vec3{size, size, size}
-		actor.RigidBody.Radius = size
+		actor.RigidBody.Collider = SphereCollider{Radius: size}
 		actor.RigidBody.Mass = size + 2
 		actor.RigidBody.ApplyForce(mgl32.Vec3{0, -9.81, 0}, Acceleration)
 		actor.RigidBody.ApplyForce(mgl32.Vec3{
@@ -242,7 +250,7 @@ func Test2() {
 	actor.AddModel(model)
 	actor.Transform.Position = mgl32.Vec3{50, 75, 50}
 	actor.Transform.Scale = mgl32.Vec3{size, size, size}
-	actor.RigidBody.Radius = size
+	actor.RigidBody.Collider = SphereCollider{Radius: size}
 	actor.RigidBody.Mass = size
 	actor.RigidBody.ApplyForce(mgl32.Vec3{0, -9.81, 0}, Acceleration)
 	actors = append(actors, actor)
@@ -252,7 +260,7 @@ func Test2() {
 	actor.AddModel(model)
 	actor.Transform.Position = mgl32.Vec3{50, 25, 50}
 	actor.Transform.Scale = mgl32.Vec3{size, size, size}
-	actor.RigidBody.Radius = size
+	actor.RigidBody.Collider = SphereCollider{Radius: size}
 	actor.RigidBody.Mass = size
 	actor.RigidBody.ApplyForce(mgl32.Vec3{0, -9.81, 0}, Acceleration)
 	actors = append(actors, actor)
@@ -266,7 +274,7 @@ func Test3() {
 	actor.AddModel(model)
 	actor.Transform.Position = mgl32.Vec3{10, 75, 50}
 	actor.Transform.Scale = mgl32.Vec3{size, size, size}
-	actor.RigidBody.Radius = size
+	actor.RigidBody.Collider = SphereCollider{Radius: size}
 	actor.RigidBody.Mass = size
 	actor.RigidBody.ApplyForce(mgl32.Vec3{0, -9.81, 0}, Acceleration)
 	actor.RigidBody.ApplyForce(mgl32.Vec3{5, 0, 0}, Impulse)
@@ -277,7 +285,7 @@ func Test3() {
 	actor.AddModel(model)
 	actor.Transform.Position = mgl32.Vec3{90, 75, 50}
 	actor.Transform.Scale = mgl32.Vec3{size, size, size}
-	actor.RigidBody.Radius = size
+	actor.RigidBody.Collider = SphereCollider{Radius: size}
 	actor.RigidBody.Mass = size
 	actor.RigidBody.ApplyForce(mgl32.Vec3{0, -9.81, 0}, Acceleration)
 	actor.RigidBody.ApplyForce(mgl32.Vec3{-5, 0, 0}, Impulse)
@@ -297,7 +305,7 @@ func Test4() {
 			rand.Float32() * 100,
 		}
 		actor.Transform.Scale = mgl32.Vec3{size, size, size}
-		actor.RigidBody.Radius = size
+		actor.RigidBody.Collider = SphereCollider{Radius: size}
 		actor.RigidBody.Mass = size + 1
 		actor.RigidBody.ApplyForce(mgl32.Vec3{0, -9.81, 0}, Acceleration)
 		actor.RigidBody.ApplyForce(mgl32.Vec3{
