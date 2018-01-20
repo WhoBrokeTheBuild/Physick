@@ -9,5 +9,4 @@ ENV GOPATH=/opt/go
 ENV AGENT_WORKDIR=${GOPATH}/src/${APP_PATH}
 
 RUN apk update && \
-    apk add --update --no-cache go make mesa-dev glu-dev libc-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev && \
-    mkdir -p /opt/go/src/github.com/whoBrokeTheBuild
+    apk add --update --no-cache go make mesa-dev glu-dev libc-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev
